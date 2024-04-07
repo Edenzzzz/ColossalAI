@@ -61,7 +61,11 @@ class GLUEDataBuilder:
 
         self.text_fields = self.task_text_field_map[task_name]
         self.num_labels = self.glue_task_num_labels[task_name]
-        self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path, use_fast=True)
+        self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
+            self.model_name_or_path, use_fast=True, trust_remote_code=True
+        )
+        if not getattr(self.tokenizer, "pad_token", None):
+            self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
         self.setup()
 
     def setup(self):

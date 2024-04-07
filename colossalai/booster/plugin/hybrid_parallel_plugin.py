@@ -68,7 +68,17 @@ class HybridParallelModule(ModelWrapper, AMPModelMixin):
         shardformer = ShardFormer(shard_config)
         if custom_policy is not None:
             assert isinstance(custom_policy, object)
+
+        if dist.get_rank() == 0:
+            id_before = id(list(module.parameters())[0])
+            print("param id before sharding:", id(list(module.parameters())[0]))
         module, self.shared_params = shardformer.optimize(module, policy=custom_policy)
+
+        if dist.get_rank() == 0:
+            id_after = id(list(module.parameters())[0])
+            print("param id after sharding:", id_after)
+            if id_after != id_before:
+                print(f"Bug: param not sharded in-place!")
 
         # setting process groups for shared parameters
         self.shared_param_process_groups = []

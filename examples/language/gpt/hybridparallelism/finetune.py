@@ -10,7 +10,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoConfig, GPT2ForSequenceClassification, get_linear_schedule_with_warmup
+from transformers import AutoConfig, AutoModelForSequenceClassification, get_linear_schedule_with_warmup
 
 import colossalai
 from colossalai.accelerator import get_accelerator
@@ -18,11 +18,12 @@ from colossalai.booster import Booster
 from colossalai.booster.plugin import GeminiPlugin, HybridParallelPlugin, LowLevelZeroPlugin, TorchDDPPlugin
 from colossalai.cluster import DistCoordinator
 from colossalai.nn.optimizer import HybridAdam
+from colossalai.testing import spawn
 
 # ==============================
 # Prepare Hyperparameters
 # ==============================
-NUM_EPOCHS = 3
+NUM_EPOCHS = 1
 BATCH_SIZE = 32
 LEARNING_RATE = 2.4e-5
 WEIGHT_DECAY = 0.01
@@ -159,13 +160,15 @@ def train_epoch(
                 # Backward
                 booster.backward(loss, optimizer)
                 pbar.set_postfix({"loss": loss.item()})
-
+            if dist.get_rank() == 0:
+                pass
+            dist.barrier()
             optimizer.step()
             optimizer.zero_grad()
             lr_scheduler.step()
 
 
-def main():
+def main(rank, world_size, port):
     # ==============================
     # Parse Arguments
     # ==============================
@@ -175,28 +178,25 @@ def main():
         "-p",
         "--plugin",
         type=str,
-        default="torch_ddp",
+        default="hybrid_parallel",
         choices=["torch_ddp", "torch_ddp_fp16", "gemini", "low_level_zero", "hybrid_parallel"],
         help="plugin to use",
     )
     parser.add_argument(
         "--model_type",
         type=str,
-        default="gpt2",
-        help="only gpt2 now",
+        default="google-bert/bert-base-cased",
     )
     parser.add_argument("--target_f1", type=float, default=None, help="target f1 score. Raise exception if not reached")
     parser.add_argument("--use_lazy_init", type=bool, default=False, help="for initiating lazy init context")
     args = parser.parse_args()
 
-    if args.model_type == "gpt2":
-        model_name = "gpt2"
-    else:
-        raise RuntimeError
+    model_name = args.model_type
     # ==============================
     # Launch Distributed Environment
     # ==============================
-    colossalai.launch_from_torch(config={}, seed=42)
+    # colossalai.launch_from_torch(config={}, seed=42)
+    colossalai.launch(config={}, rank=rank, world_size=world_size, host="localhost", port=port, backend="nccl")
     coordinator = DistCoordinator()
 
     # local_batch_size = BATCH_SIZE // coordinator.world_size
@@ -216,15 +216,24 @@ def main():
         plugin = LowLevelZeroPlugin(initial_scale=2**5)
     elif args.plugin == "hybrid_parallel":
         # modify the param accordingly for finetuning test cases
+        config = {
+            "tp_size": 4,
+            "num_microbatches": 4,
+            "zero_stage": 0,
+            "pp_size": 1,
+            "enable_all_optimization": True,
+            "precision": "fp16",
+        }
         plugin = HybridParallelPlugin(
-            tp_size=1,
-            pp_size=2,
-            num_microbatches=None,
-            microbatch_size=1,
-            enable_all_optimization=True,
-            zero_stage=1,
-            precision="fp16",
-            initial_scale=1,
+            **config
+            # tp_size=2,
+            # pp_size=1,
+            # num_microbatches=None,
+            # microbatch_size=1,
+            # enable_all_optimization=True,
+            # zero_stage=0,
+            # precision="fp16",
+            # initial_scale=1,
         )
 
     booster = Booster(plugin=plugin, **booster_kwargs)
@@ -243,12 +252,10 @@ def main():
     # ====================================
     # gpt2 pretrained model
 
-    cfg = AutoConfig.from_pretrained(model_name, num_labels=data_builder.num_labels)
+    cfg = AutoConfig.from_pretrained(model_name, num_labels=data_builder.num_labels, trust_remote_code=True)
+    cfg.pad_token_id = data_builder.tokenizer.pad_token_id
 
-    if model_name == "gpt2":
-        model = GPT2ForSequenceClassification.from_pretrained(model_name, config=cfg).cuda()
-    else:
-        raise RuntimeError
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, config=cfg, trust_remote_code=True).cuda()
 
     # optimizer
     no_decay = ["bias", "LayerNorm.weight"]
@@ -282,15 +289,19 @@ def main():
     # ==============================
     # Boost with ColossalAI
     # ==============================
+    id(list(model.parameters())[0])
     model, optimizer, _criterion, _, lr_scheduler = booster.boost(
         model, optimizer, criterion=_criterion, lr_scheduler=lr_scheduler
     )
-
+    copy = list(model.module.parameters())[0].clone()
     # ==============================
     # Train model
     # ==============================
     for epoch in range(NUM_EPOCHS):
         train_epoch(epoch, model, optimizer, _criterion, lr_scheduler, train_dataloader, booster, coordinator)
+
+    if (list(model.module.parameters())[0] == copy).all():
+        print("Bug: The sharded params didn't update")
 
     results = evaluate_model(
         model,
@@ -310,4 +321,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    spawn(main, nprocs=4)
+    # main()

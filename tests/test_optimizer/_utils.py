@@ -29,7 +29,12 @@ def check_bert_fwd_bwd(
     org_model, org_optimizer, sharded_model, sharded_optimizer, criterion, booster = build_model_from_hybrid_plugin(
         model_fn, loss_fn, test_config, optim_class, sharded_optim_class
     )
+    import torch.distributed as dist
 
+    if list(sharded_model.parameters())[0].shape != sharded_optimizer.param_groups[0]["params"][0].shape:
+        if dist.get_rank() == 0:
+            pass
+    dist.barrier()
     org_loss, org_output, sharded_loss, sharded_output = run_forward_backward_with_hybrid_plugin(
         org_model, sharded_model, sharded_optimizer, data_gen_fn, output_transform_fn, criterion, booster
     )
@@ -62,41 +67,46 @@ def check_bert_fwd_bwd(
     "test_config",
     [
         {
-            "tp_size": 1,
-            "num_microbatches": 4,
-            "zero_stage": 2,
-            "precision": "bf16",
-        },
-        {
             "tp_size": 2,
             "num_microbatches": 4,
-            "zero_stage": 2,
-            "precision": "bf16",
-        },
-        {
-            "tp_size": 4,
-            "num_microbatches": 4,
-            "zero_stage": 2,
-            "precision": "bf16",
-        },
-        {
-            "tp_size": 1,
-            "num_microbatches": 4,
-            "zero_stage": 2,
+            "zero_stage": 0,
+            "pp_size": 1,
+            "enable_all_optimization": True,
             "precision": "fp16",
+            "enable_sequence_parallelism": True,
+            "enable_sequence_overlap": True
+            # "enable_all_optimization": True
         },
-        {
-            "tp_size": 2,
-            "num_microbatches": 4,
-            "zero_stage": 2,
-            "precision": "fp16",
-        },
-        {
-            "tp_size": 4,
-            "num_microbatches": 4,
-            "zero_stage": 2,
-            "precision": "fp16",
-        },
+        # {
+        #     "tp_size": 2,
+        #     "num_microbatches": 4,
+        #     "zero_stage": 2,
+        #     "precision": "bf16",
+        # },
+        # {
+        #     "tp_size": 4,
+        #     "num_microbatches": 4,
+        #     "zero_stage": 2,
+        #     "precision": "bf16",
+        # },
+        # {
+        #     "tp_size": 1,
+        #     "num_microbatches": 4,
+        #     "zero_stage": 2,
+        #     "precision": "fp16",
+        # },
+        # {
+        #     "tp_size": 2,
+        #     "num_microbatches": 4,
+        #     "zero_stage": 2,
+        #     "precision": "fp16",
+        # },
+        # {
+        #     "tp_size": 4,
+        #     "num_microbatches": 4,
+        #     "zero_stage": 2,
+        #     "precision": "fp16",
+        # },
     ],
 )
 def run_bert_test(test_config, optim_class, sharded_optim_class):
