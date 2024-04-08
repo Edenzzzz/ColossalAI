@@ -40,13 +40,18 @@ class BertPolicy(Policy):
         r"""
         Reshape the Embedding layer to make the embedding dimension divisible by world_size
         """
-        # TODO:
         if self.shard_config.enable_tensor_parallelism:
-            vocab_size = self.model.config.vocab_size
+            vocab_size = self.model.bert.embeddings.word_embeddings.weight.data.shape[0]
             world_size = self.shard_config.tensor_parallel_size
             if vocab_size % world_size != 0:
-                new_vocab_size = vocab_size + world_size - vocab_size % world_size
-                self.model.resize_token_embeddings(new_vocab_size)
+                pad_size = world_size - vocab_size % world_size
+                self.model.bert.embeddings.word_embeddings.weight.data = nn.functional.pad(
+                    self.model.bert.embeddings.word_embeddings.weight.data,
+                    (0, 0, 0, pad_size),
+                    "constant",
+                    self.model.bert.embeddings.word_embeddings.weight.data.mean(),
+                )
+
         return self.model
 
     def module_policy(self):

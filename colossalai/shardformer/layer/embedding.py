@@ -260,16 +260,19 @@ class VocabParallelEmbedding1D(ParallelModule):
             process_group = process_group[0]
 
         # create the parallel module
-        vocab_embedding_1d = VocabParallelEmbedding1D(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
-            device=device,
-            process_group=process_group,
-            weight=module.weight,
-            *args,
-            **kwargs,
-        )
+        try:
+            vocab_embedding_1d = VocabParallelEmbedding1D(
+                num_embeddings=num_embeddings,
+                embedding_dim=embedding_dim,
+                padding_idx=padding_idx,
+                device=device,
+                process_group=process_group,
+                weight=module.weight,
+                *args,
+                **kwargs,
+            )
+        except:
+            pass
 
         return vocab_embedding_1d
 

@@ -71,12 +71,12 @@ class HybridParallelModule(ModelWrapper, AMPModelMixin):
 
         if dist.get_rank() == 0:
             id_before = id(list(module.parameters())[0])
-            print("param id before sharding:", id(list(module.parameters())[0]))
+            print("param id before sharding:", (id(param) for param in list(module.parameters())))
         module, self.shared_params = shardformer.optimize(module, policy=custom_policy)
 
         if dist.get_rank() == 0:
             id_after = id(list(module.parameters())[0])
-            print("param id after sharding:", id_after)
+            print("param id after sharding:", (id(param) for param in list(module.parameters())))
             if id_after != id_before:
                 print(f"Bug: param not sharded in-place!")
 

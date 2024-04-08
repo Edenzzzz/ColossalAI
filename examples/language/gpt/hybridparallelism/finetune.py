@@ -185,7 +185,7 @@ def main(rank, world_size, port):
     parser.add_argument(
         "--model_type",
         type=str,
-        default="google-bert/bert-base-cased",
+        default="gpt2",
     )
     parser.add_argument("--target_f1", type=float, default=None, help="target f1 score. Raise exception if not reached")
     parser.add_argument("--use_lazy_init", type=bool, default=False, help="for initiating lazy init context")

@@ -65,7 +65,11 @@ class GLUEDataBuilder:
             self.model_name_or_path, use_fast=True, trust_remote_code=True
         )
         if not getattr(self.tokenizer, "pad_token", None):
-            self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+            # import torch.distributed as dist
+            # if dist.get_rank() == 0:
+            #     pass
+            # dist.barrier()
+            self.tokenizer.pad_token = self.tokenizer._eos_token
         self.setup()
 
     def setup(self):
