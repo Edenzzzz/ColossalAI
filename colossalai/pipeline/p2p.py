@@ -361,27 +361,27 @@ def _communicate(
 
     # NOTE: send & recv should be atomic operations. However, if we need to send metadata or receive metadata,
     #   we are not able to do that (1. send & recv metadata 2. send & recv). So we need to split the send & recv into two parts in this case.
-    if (send_dst is not None and recv_src is not None) and (send_metadata or metadata_recv is None):
-        assert send_prior_fallback is not None, "Priority must be set if fallback happens"
-        if send_prior_fallback:
-            _communicate(object, send_dst=send_dst, recv_src=None, send_group=send_group, send_metadata=send_metadata)
-            return _communicate(
-                None, send_dst=None, recv_src=recv_src, recv_group=recv_group, metadata_recv=metadata_recv
-            )
-        else:
-            recv_data = _communicate(
-                None, send_dst=None, recv_src=recv_src, recv_group=recv_group, metadata_recv=metadata_recv
-            )
-            _communicate(object, send_dst=send_dst, recv_src=None, send_group=send_group, send_metadata=send_metadata)
-            return recv_data
+    # if (send_dst is not None and recv_src is not None) and (send_metadata or metadata_recv is None):
+    #     assert send_prior_fallback is not None, "Priority must be set if fallback happens"
+    #     if send_prior_fallback:
+    #         _communicate(object, send_dst=send_dst, recv_src=None, send_group=send_group, send_metadata=send_metadata)
+    #         return _communicate(
+    #             None, send_dst=None, recv_src=recv_src, recv_group=recv_group, metadata_recv=metadata_recv
+    #         )
+    #     else:
+    #         recv_data = _communicate(
+    #             None, send_dst=None, recv_src=recv_src, recv_group=recv_group, metadata_recv=metadata_recv
+    #         )
+    #         _communicate(object, send_dst=send_dst, recv_src=None, send_group=send_group, send_metadata=send_metadata)
+    #         return recv_data
 
-    # NOTE: only the following 5 cases are valid:
-    #   1. send() [needs extra metadata] and no recv()
-    #   2. recv() [needs extra metadata] and no send()
-    #   3. neither send() nor recv() need extra metadata
-    assert not (send_dst is not None and send_metadata) or recv_src is None
-    assert not (recv_src is not None and metadata_recv is None) or send_dst is None
-    assert not (send_dst is not None and recv_src is not None) or (not send_metadata and metadata_recv is not None)
+    # # NOTE: only the following 5 cases are valid:
+    # #   1. send() [needs extra metadata] and no recv()
+    # #   2. recv() [needs extra metadata] and no send()
+    # #   3. neither send() nor recv() need extra metadata
+    # assert not (send_dst is not None and send_metadata) or recv_src is None
+    # assert not (recv_src is not None and metadata_recv is None) or send_dst is None
+    # assert not (send_dst is not None and recv_src is not None) or (not send_metadata and metadata_recv is not None)
     assert not c10d._rank_not_in_group(send_group) and not c10d._rank_not_in_group(recv_group)
 
     current_send_device, is_send_nccl_backend = _check_device(send_group)

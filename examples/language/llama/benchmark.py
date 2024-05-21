@@ -169,8 +169,8 @@ def main():
             microbatch_size=args.mbs,
             precision="bf16",
             dp_outside=False,
-            pp_style="interleaved",
-            num_model_chunks=2,
+            pp_style="1f1b",
+            num_model_chunks=1,
             **hybrid_kwargs,
         )
     elif args.plugin == "3d_cpu":
