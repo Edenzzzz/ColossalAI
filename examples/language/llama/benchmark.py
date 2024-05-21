@@ -169,6 +169,8 @@ def main():
             microbatch_size=args.mbs,
             precision="bf16",
             dp_outside=False,
+            pp_style="interleaved",
+            num_model_chunks=2,
             **hybrid_kwargs,
         )
     elif args.plugin == "3d_cpu":
@@ -250,9 +252,13 @@ def main():
         data_iter = iter(dataloader)
         for step in tqdm(range(len(dataloader)), desc="Step", disable=not coordinator.is_master()):
             performance_evaluator.on_step_start(step)
-            booster.execute_pipeline(
-                data_iter, model, criterion=lambda outputs, inputs: outputs[0], optimizer=optimizer, return_loss=False
+            loss = booster.execute_pipeline(
+                data_iter, model, criterion=lambda outputs, inputs: outputs[0], optimizer=optimizer, return_loss=True
             )
+            import torch.distributed as dist
+
+            if dist.get_rank() == dist.get_world_size() - 1:
+                print(f"Step {step}: loss={loss}")
             optimizer.step()
             optimizer.zero_grad()
             performance_evaluator.on_step_end(input_ids=torch.empty(args.batch_size, args.max_length))
