@@ -76,6 +76,8 @@ def main():
     parser.add_argument("--mbs", type=int, default=1, help="Micro batch size of pipeline parallel")
     parser.add_argument("--zero", type=int, default=0, help="Zero Stage when hybrid plugin is enabled")
     parser.add_argument("--custom-ckpt", action="store_true", help="Customize checkpoint", default=False)
+    parser.add_argument("--pp_style", type=str, default="1f1b", help="Pipeline parallel style")
+
     args = parser.parse_args()
 
     colossalai.launch_from_torch()
@@ -169,8 +171,8 @@ def main():
             microbatch_size=args.mbs,
             precision="bf16",
             dp_outside=False,
-            pp_style="1f1b",
-            num_model_chunks=1,
+            pp_style=args.pp_style,
+            num_model_chunks=1 if args.pp_style == "1f1b" else 2,
             **hybrid_kwargs,
         )
     elif args.plugin == "3d_cpu":
