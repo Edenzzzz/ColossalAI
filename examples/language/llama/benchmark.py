@@ -3,6 +3,7 @@ import resource
 from contextlib import nullcontext
 
 import torch
+import torch.distributed as dist
 from data_utils import RandomDataset
 from model_utils import format_numel_str, get_model_numel
 from performance_evaluator import PerformanceEvaluator
@@ -201,10 +202,12 @@ def main():
         config = MODEL_CONFIGS[args.config]
     else:
         config = AutoConfig.from_pretrained(args.config, trust_remote_code=True)
+
+    torch.cuda.manual_seed(42)
     dataset = RandomDataset(
         num_samples=args.batch_size * args.num_steps * dp_size, max_length=args.max_length, vocab_size=config.vocab_size
     )
-    dataloader = plugin.prepare_dataloader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    dataloader = plugin.prepare_dataloader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, seed=42)
 
     # ==============================
     # Initialize Model and Optimizer
@@ -254,13 +257,19 @@ def main():
         data_iter = iter(dataloader)
         for step in tqdm(range(len(dataloader)), desc="Step", disable=not coordinator.is_master()):
             performance_evaluator.on_step_start(step)
-            loss = booster.execute_pipeline(
-                data_iter, model, criterion=lambda outputs, inputs: outputs[0], optimizer=optimizer, return_loss=True
+            ret_dict = booster.execute_pipeline(
+                data_iter,
+                model,
+                criterion=lambda outputs, inputs: outputs[0],
+                optimizer=optimizer,
+                return_loss=True,
+                return_outputs=True,
             )
-            import torch.distributed as dist
 
             if dist.get_rank() == dist.get_world_size() - 1:
-                print(f"Step {step}: loss={loss}")
+                loss = ret_dict["loss"]
+                output = ret_dict["outputs"]["logits"].mean()
+                print(f"Step {step}: loss={loss}, output={output}")
             optimizer.step()
             optimizer.zero_grad()
             performance_evaluator.on_step_end(input_ids=torch.empty(args.batch_size, args.max_length))
