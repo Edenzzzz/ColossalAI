@@ -81,7 +81,10 @@ class LinearWithAsyncCommunication(torch.autograd.Function):
             handle = dist.all_reduce(grad_input, group=gpc.get_group(ctx.parallel_mode), async_op=True)
             # Delay the start of weight gradient computation shortly (3us) to have
             # all-reduce scheduled first and have GPU resources allocated
-            _ = torch.empty(1, device=grad_output.device) + 1
+
+            # NOTE: this forces matmul to be launched after comm and achieves overlap, but slows things down
+            # _ = torch.zeros(1, device=grad_output.device)
+            # launch_event.wait()
 
         grad_weight = grad_output.t().matmul(total_input)
         grad_bias = grad_output.sum(dim=0) if use_bias else None
